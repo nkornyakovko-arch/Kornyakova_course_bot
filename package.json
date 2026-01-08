@@ -1,0 +1,19 @@
+{
+  "name": "telegram-course-bot",
+  "version": "1.0.0",
+  "description": "Бот для выдачи видео после оплаты",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.2.3"
+  }
+}
