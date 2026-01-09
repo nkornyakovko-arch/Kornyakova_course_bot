@@ -11,7 +11,7 @@ const VIDEO_1_FILE_ID = process.env.VIDEO_1_FILE_ID;
 const VIDEO_2_FILE_ID = process.env.VIDEO_2_FILE_ID;
 const VIDEO_3_FILE_ID = process.env.VIDEO_3_FILE_ID;
 
-const PRODAMUS_CHECKOUT_URL = process.env.PRODAMUS_CHECKOUT_URL;
+const PRODAMUS_CHECKOUT_URL = process.env.PRODAMUS_CHECKOUT_URL; // Пример: https://t.me/Kornyakova_course_bot?start=pay_{USER_ID}
 
 const PORT = process.env.PORT || 10000;
 
@@ -21,15 +21,15 @@ if (!BOT_TOKEN || !WELCOME_VIDEO_FILE_ID || !PRODAMUS_CHECKOUT_URL) {
   process.exit(1);
 }
 
-// Список платных видео (можно легко расширить)
+// Список платных видео
 const PAID_VIDEOS = [
   { fileId: VIDEO_1_FILE_ID, caption: '🎥 Урок 1: Подготовка ногтевой пластины' },
   { fileId: VIDEO_2_FILE_ID, caption: '🎥 Урок 2: Нанесение базы и цвета' },
   { fileId: VIDEO_3_FILE_ID, caption: '🎥 Урок 3: Финишное покрытие и уход' }
 ].filter(video => video.fileId); // исключаем пустые
 
-// Память: кто оплатил (в продакшене — заменить на БД)
-const paidUsers = new Set();
+// Хранилище пользователей (в памяти)
+const users = {}; // { userId: { paidAt: timestamp, lastVideoSent: индекс } }
 
 // === ФУНКЦИИ ОТПРАВКИ ===
 
@@ -68,19 +68,21 @@ function sendMessage(chatId, text) {
   req.end();
 }
 
-// Установка webhook (для хостинга)
-function setWebhook(url) {
-  const webhookUrl = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${encodeURIComponent(url)}`;
-  https.get(webhookUrl, (res) => {
-    let body = '';
-    res.on('data', chunk => body += chunk);
-    res.on('end', () => {
-      console.log('✅ Webhook установлен');
-    });
-  }).on('error', (e) => {
-    console.error('❌ Не удалось установить webhook:', e.message);
-  });
-}
+// === ЛОГИКА ВЫДАЧИ ВИДЕО ПОСЛЕ ОПЛАТЫ ===
+
+// function checkAndSendDueVideo(userId, chatId) {
+//   const user = users[userId];
+//   if (!user) return;
+
+//   const daysSincePayment = Math.floor((Date.now() - user.paidAt) / (24 * 60 * 60 * 1000));
+//   const nextVideoIndex = Math.min(daysSincePayment, PAID_VIDEOS.length - 1);
+
+//   if (nextVideoIndex > user.lastVideoSent && PAID_VIDEOS[nextVideoIndex]) {
+//     const video = PAID_VIDEOS[nextVideoIndex];
+//     sendVideo(chatId, video.fileId, video.caption);
+//     user.lastVideoSent = nextVideoIndex;
+//   }
+// }
 
 // === ОБРАБОТКА СООБЩЕНИЙ ===
 
@@ -90,35 +92,59 @@ function handleUpdate(update) {
   const { message } = update;
   const chatId = message.chat.id;
   const userId = message.from.id;
+  const text = message.text || '';
 
-  if (message.text === '/start') {
-    const parts = message.text.split(' ');
+  if (text.startsWith('/start')) {
+    const parts = text.split(' ');
     const param = parts[1];
 
-    // Обработка возврата после оплаты: /start paid_123456789
-    if (param && param.startsWith('paid_')) {
-      const paidUserId = Number(param.slice(5)); // "paid_123" → 123
-      if (!isNaN(paidUserId) && paidUserId === userId) {
-        paidUsers.add(userId);
-        sendMessage(chatId, '✅ Спасибо за покупку! Вот ваш курс:');
-        
+    // ——————— Активация после оплаты: отправляем ВСЕ видео сразу ———————
+    if (param && param.startsWith('pay_')) {
+      const expectedUserId = parseInt(param.replace('pay_', ''), 10);
+      if (expectedUserId === userId) {
+        // Отправляем все платные видео
         PAID_VIDEOS.forEach(video => {
           sendVideo(chatId, video.fileId, video.caption);
         });
+        sendMessage(chatId, '🎉 Поздравляю! Вы получили весь курс. Удачи в обучении!');
+        return;
+      } else {
+        sendMessage(chatId, '⚠️ Эта ссылка не для вас.');
         return;
       }
     }
 
-    // Обычный старт — приветствие + ссылка на оплату
+    // ——————— Обычный запуск: приветствие + оплата ———————
     sendVideo(chatId, WELCOME_VIDEO_FILE_ID, '🎬 Добро пожаловать! Это бесплатное вступление.');
 
-    // Генерация ссылки: после оплаты Prodamus перенаправит сюда
-    // В Prodamus: в настройках "Ссылка после оплаты" укажи:
-    // https://t.me/YourBotName?start=paid_{USER_ID}
-    const prodamusLink = PRODAMUS_CHECKOUT_URL; // Prodamus сам подставит USER_ID, если настроить
-    const text = `🔓 Чтобы получить полный курс, оплатите доступ:\n\n<a href="${prodamusLink}">👉 Перейти к оплате</a>`;
-    sendMessage(chatId, text);
+    const payUrl = PRODAMUS_CHECKOUT_URL.replace('{USER_ID}', userId);
+    const paymentMessage = `🔓 Чтобы получить полный курс, оплатите доступ:\n\n<a href="${payUrl}">👉 Перейти к оплате</a>`;
+    sendMessage(chatId, paymentMessage);
+    return;
   }
+
+  // На всё остальное — подсказка
+  sendMessage(chatId, 'Напишите /start, чтобы начать.');
+}
+  {
+    // ——————— Обычный запуск: приветствие + оплата ———————
+    sendVideo(chatId, WELCOME_VIDEO_FILE_ID, '🎬 Добро пожаловать! Это бесплатное вступление.');
+
+    // Генерация ссылки с подстановкой USER_ID
+    const payUrl = PRODAMUS_CHECKOUT_URL.replace('{USER_ID}', userId);
+    const paymentMessage = `🔓 Чтобы получить полный курс, оплатите доступ:\n\n<a href="${payUrl}">👉 Перейти к оплате</a>`;
+    sendMessage(chatId, paymentMessage);
+    return;
+  }
+
+  // Если пользователь уже оплатил — отправляем доступные видео
+  if (users[userId]) {
+    checkAndSendDueVideo(userId, chatId);
+    return;
+  }
+{
+  // На всё остальное — подсказка
+  sendMessage(chatId, 'Напишите /start, чтобы начать.');
 }
 
 // === HTTP-СЕРВЕР ===
@@ -145,10 +171,25 @@ const server = http.createServer((req, res) => {
   }
 });
 
+// === УСТАНОВКА WEBHOOK ===
+
+function setWebhook(url) {
+  const fullUrl = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${encodeURIComponent(url)}`;
+  https.get(fullUrl, (res) => {
+    let body = '';
+    res.on('data', chunk => body += chunk);
+    res.on('end', () => {
+      console.log('✅ Webhook установлен на:', url);
+    });
+  }).on('error', (e) => {
+    console.error('❌ Не удалось установить webhook:', e.message);
+  });
+}
+
 // === ЗАПУСК ===
 
 server.listen(PORT, () => {
   console.log(`✅ Бот запущен на порту ${PORT}`);
-  const publicUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  const publicUrl = process.env.RENDER_EXTERNAL_URL || `https://your-bot.onrender.com`;
   setWebhook(publicUrl);
 });
