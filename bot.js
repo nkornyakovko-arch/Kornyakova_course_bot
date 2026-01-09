@@ -70,19 +70,19 @@ function sendMessage(chatId, text) {
 
 // === ЛОГИКА ВЫДАЧИ ВИДЕО ПОСЛЕ ОПЛАТЫ ===
 
-// function checkAndSendDueVideo(userId, chatId) {
-//   const user = users[userId];
-//   if (!user) return;
+ function checkAndSendDueVideo(userId, chatId) {
+   const user = users[userId];
+   if (!user) return;
 
-//   const daysSincePayment = Math.floor((Date.now() - user.paidAt) / (24 * 60 * 60 * 1000));
-//   const nextVideoIndex = Math.min(daysSincePayment, PAID_VIDEOS.length - 1);
+   const daysSincePayment = Math.floor((Date.now() - user.paidAt) / (24 * 60 * 60 * 1000));
+   const nextVideoIndex = Math.min(daysSincePayment, PAID_VIDEOS.length - 1);
 
-//   if (nextVideoIndex > user.lastVideoSent && PAID_VIDEOS[nextVideoIndex]) {
-//     const video = PAID_VIDEOS[nextVideoIndex];
-//     sendVideo(chatId, video.fileId, video.caption);
-//     user.lastVideoSent = nextVideoIndex;
-//   }
-// }
+   if (nextVideoIndex > user.lastVideoSent && PAID_VIDEOS[nextVideoIndex]) {
+     const video = PAID_VIDEOS[nextVideoIndex];
+    sendVideo(chatId, video.fileId, video.caption);
+    user.lastVideoSent = nextVideoIndex;
+  }
+}
 
 // === ОБРАБОТКА СООБЩЕНИЙ ===
 
